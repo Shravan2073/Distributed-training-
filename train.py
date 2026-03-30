@@ -24,6 +24,7 @@ from torch.utils.data import DataLoader, DistributedSampler
 from torchvision import datasets, transforms
 import torch.nn as nn
 import torch.optim as optim
+from tqdm import tqdm
 
 
 # ─── Config ──────────────────────────────────────────────────────────────────
@@ -34,8 +35,8 @@ def parse_args():
     p.add_argument("--world-size",  type=int,   required=True,          help="Total number of machines/processes")
     p.add_argument("--master-addr", type=str,   required=True,          help="Tailscale IP of the master node")
     p.add_argument("--master-port", type=str,   default="29500",        help="Port to use (default: 29500)")
-    p.add_argument("--backend",     type=str,   default="gloo",         help="Distributed backend: gloo (CPU) or nccl (GPU)")
-    p.add_argument("--epochs",      type=int,   default=5,              help="Number of training epochs")
+    p.add_argument("--backend",     type=str,   default="nccl",         help="Distributed backend: gloo (CPU) or nccl (GPU)")
+    p.add_argument("--epochs",      type=int,   default=1,              help="Number of training epochs")
     p.add_argument("--batch-size",  type=int,   default=64,             help="Per-node batch size")
     p.add_argument("--lr",          type=float, default=1e-3,           help="Learning rate")
     p.add_argument("--data-dir",    type=str,   default="./data",       help="Where to download MNIST")
@@ -201,7 +202,9 @@ def train_one_epoch(model, loader, sampler, optimizer, loss_fn, device, epoch, r
     correct    = 0
     total      = 0
 
-    for batch_idx, (data, target) in enumerate(loader):
+    progress = tqdm(loader, desc=f"Rank {rank} Epoch {epoch+1}", position=rank, leave=True)
+
+    for batch_idx, (data, target) in enumerate(progress):
         data, target = data.to(device), target.to(device)
 
         optimizer.zero_grad()
@@ -215,11 +218,10 @@ def train_one_epoch(model, loader, sampler, optimizer, loss_fn, device, epoch, r
         correct    += pred.eq(target).sum().item()
         total      += target.size(0)
 
-        if rank == 0 and (batch_idx + 1) % log_interval == 0:
+        if (batch_idx + 1) % log_interval == 0 or (batch_idx + 1) == len(loader):
             avg_loss = total_loss / (batch_idx + 1)
             acc      = 100.0 * correct / total
-            print(f"  [Epoch {epoch+1}] Batch {batch_idx+1}/{len(loader)} | "
-                  f"Loss: {avg_loss:.4f} | Acc: {acc:.1f}%")
+            progress.set_postfix(loss=f"{avg_loss:.4f}", acc=f"{acc:.1f}%")
 
     return total_loss / len(loader), 100.0 * correct / total
 

@@ -14,6 +14,21 @@ import platform
 import time
 
 
+def detect_cuda_gpus():
+    """Return (has_gpu, message) based on torch CUDA availability."""
+    try:
+        import torch
+    except ImportError:
+        return False, "PyTorch not installed"
+
+    if not torch.cuda.is_available():
+        return False, "CUDA not available"
+
+    names = [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
+    msg = f"Detected {len(names)} CUDA GPU(s): {', '.join(names)}"
+    return True, msg
+
+
 def check_tailscale():
     try:
         result = subprocess.run(["tailscale", "ip", "-4"], capture_output=True, text=True)
@@ -127,6 +142,20 @@ def main():
     epochs      = input("Number of epochs [default: 5]: ").strip() or "5"
     batch_size  = input("Batch size per node [default: 64]: ").strip() or "64"
 
+    gpu_ok, gpu_msg = detect_cuda_gpus()
+    if gpu_ok:
+        backend = "nccl"
+        print(f"\n✔ GPU check: {gpu_msg}")
+        print("   Using NCCL backend for GPU training.")
+    else:
+        print(f"\n✗ GPU check failed: {gpu_msg}")
+        retry_gpu = input("Run on CPU instead? (yes/no) [default: no]: ").strip().lower()
+        if retry_gpu not in ["yes", "y"]:
+            print("Aborted. Set up CUDA GPUs and retry (or run gpu_test.py for diagnostics).")
+            sys.exit(1)
+        backend = "gloo"
+        print("   Falling back to CPU with Gloo backend.")
+
     if role == "master":
         rank        = 0
         master_addr = my_ip
@@ -159,6 +188,7 @@ def main():
         "--world-size",  str(world_size),
         "--master-addr", master_addr,
         "--master-port", master_port,
+        "--backend",    backend,
         "--epochs",      epochs,
         "--batch-size",  batch_size,
     ]
