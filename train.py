@@ -149,12 +149,12 @@ def cleanup():
 # ─── Model ───────────────────────────────────────────────────────────────────
 
 class SimpleNet(nn.Module):
-    """Small CNN for MNIST — swap this out for your own model."""
+    """Small CNN for CIFAR-10 — swap this out for your own model."""
     def __init__(self):
         super().__init__()
         self.net = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(28 * 28, 256),
+            nn.Linear(32 * 32 * 3, 256),
             nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(256, 128),
@@ -271,11 +271,11 @@ def main():
         # ── Data ──────────────────────────────────────────────────────────────────
         transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,)),  # MNIST mean/std
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616)),  # CIFAR-10 mean/std
         ])
 
-        print(f"[Rank {args.rank}] Loading MNIST dataset from {args.data_dir}...")
-        dataset = datasets.MNIST(
+        print(f"[Rank {args.rank}] Loading CIFAR-10 dataset from {args.data_dir}...")
+        dataset = datasets.CIFAR10(
             root=args.data_dir,
             train=True,
             download=True,
